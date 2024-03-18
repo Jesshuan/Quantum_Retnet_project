@@ -477,9 +477,6 @@ class MultiScaleRetention(nn.Module):
         # out gate & proj
         out = self.gate_fn(g) * normed
         out = self.out_proj(out)
-
-        pdb.set_trace()
-
         outputs = (out, curr_kv)
         if output_retentions:
             outputs += (retention_weights,) if forward_impl == "parallel" else (None,)
