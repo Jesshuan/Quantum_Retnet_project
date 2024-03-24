@@ -1,3 +1,5 @@
-/checkpoints/*
+checkpoints/*
 retnet/__pycache__/*
-/data/*
+data/*
+model_store/*
+dataset_store/*
