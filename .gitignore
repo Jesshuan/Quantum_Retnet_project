@@ -3,3 +3,4 @@ retnet/__pycache__/*
 data/*
 model_store/*
 dataset_store/*
+.env
