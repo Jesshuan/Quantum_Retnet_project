@@ -40,9 +40,9 @@ logger = logging.get_logger(__name__)
 
 
 # helper functions
-def split_heads(tensors, bsz, seqlen, num_heads):
+"""def split_heads(tensors, bsz, seqlen, num_heads):
     assert isinstance(tensors, (tuple, list))
-    return [x.view(bsz, seqlen, num_heads, -1).transpose(1, 2) for x in tensors]
+    return [x.view(bsz, seqlen, num_heads, -1).transpose(1, 2) for x in tensors]"""
 
 
 def rotate_every_two(x):
@@ -106,7 +106,7 @@ class RetNetRelPos(nn.Module):
             decay = torch.log(1 - torch.exp(torch.linspace(s, e, num_heads)))  # [h,]
         else:
             decay = torch.log(
-                1 - 2 ** (-5 - torch.arange(num_heads, dtype=torch.float))
+                1 - 2 ** (-5 - torch.arange(1, dtype=torch.float))
             )
         self.register_buffer("angle", angle)
         self.register_buffer("decay", decay)
@@ -175,25 +175,41 @@ class RetNetRelPos(nn.Module):
             index = torch.arange(slen).to(self.decay)
             sin = torch.sin(index[:, None] * self.angle[None, :])
             cos = torch.cos(index[:, None] * self.angle[None, :])
+
             mask = torch.tril(torch.ones(slen, slen)).to(self.decay)
             mask = torch.masked_fill(
                 index[:, None] - index[None, :], ~mask.bool(), float("inf")
             )
-            mask = torch.exp(mask * self.decay[:, None, None])
+            print("mask")
+            print(mask)
+            print("decay")
+            print(self.decay[:,None])
+            mask = torch.exp(mask * self.decay[:, None])
+            print("result")
+            print(mask)
             mask = torch.nan_to_num(mask)
             mask = mask.unsqueeze(0)  # [1, h, t, t]
+            print(mask)
             if retention_mask is not None:
+                print("retention_mask True !")
                 # this is required for left padding
                 mask = mask * retention_mask.float().view(-1, 1, 1, slen).to(mask)
+                print(mask)
 
             # scaling
+            print("scaling")
             mask = mask / mask.sum(dim=-1, keepdim=True).sqrt()
+            print(mask)
             mask = torch.nan_to_num(mask, nan=0.0)
+            print(mask)
             # decay_scale (used for kv cache)
             if get_decay_scale:
                 decay_scale = self.compute_decay_scale(slen, retention_mask)
             else:
                 decay_scale = None
+
+            print("decay_scale")
+            print(decay_scale)
             # mask processing for intra decay
             if retention_mask is not None:
                 max_non_zero = (
@@ -202,6 +218,9 @@ class RetNetRelPos(nn.Module):
                 intra_decay = mask[range(mask.shape[0]), :, max_non_zero]
             else:
                 intra_decay = mask[:, :, -1]
+
+            print("intra_decay")
+            print(intra_decay)
 
             retention_rel_pos = ((sin, cos), (mask, intra_decay, decay_scale))
 
@@ -533,25 +552,33 @@ class MultiScaleRetention(nn.Module):
 
     def parallel_retention(self, q, k, v, decay_mask):
         """
-        q,  # bsz * num_head * len * qk_dim
-        k,  # bsz * num_head * len * qk_dim
+        q,  # bsz * num_head * len
+        k,  # bsz * num_head * len
         v,  # bsz * num_head * len * v_dim
         decay_mask,  # (1 or bsz) * num_head * len * len
         """
         decay_mask, intra_decay, scale = decay_mask
+        print("decay_mask")
+        print(decay_mask)
         # just return retention_rel_pos projected
         # TODO: for shardformer
+        print("intra_decay")
+        print(self.decay_proj)
         if self.decay_proj is not None:
             decay_mask = self.decay_proj(decay_mask.transpose(-1, -3)).transpose(-3, -1)
 
-        # [b, h, t, t]
-        retention = q @ k.transpose(-1, -2)  # (scaled dot-product)
+        # [b, t, t]
+        print(torch.unsqueeze(q, dim=0))
+        print(k)
+        retention = torch.einsum('ij,ik->ijk', q, k).real  # (scaled dot-product)
+        print(retention)
         retention = retention * decay_mask
+        print(retention)
         # invariant after normalization
         retention = retention / retention.detach().abs().sum(
             dim=-1, keepdim=True
         ).clamp(min=1, max=5e4)
-
+        print(retention)
         output = retention @ v  # [b, h, t, v_dim / h]
 
         output = output.transpose(1, 2)  # [b, t, h, v_dim / h]
@@ -701,20 +728,29 @@ class MultiScaleRetention(nn.Module):
         cache = {"prev_key_value": kv_state.transpose(-2, -1), "scale": decay_scale}
         return output, cache
     
-    def get_exp_from_observables(self, x, q_dev, quantum_layer, observables, session=None, return_quant_exec_time = False):
+    def get_exp_from_observables(self, x, quantum_layer, observables, session=None, return_quant_exec_time = False):
+        
+        q_dev = tq.QuantumDevice(n_wires=self.embed_dim, device=self.q_device, bsz=x.shape[0])
 
         if session is not None:
             options = Options(optimization_level=1, execution={"shots":self.nb_shots})
             estimator = Estimator(session=session, options=options)
 
-            job = estimator.run(circuits=[tq2qiskit(q_device=q_dev, m=quantum_layer, x=x) for o in range(len(observables))],
+            all_batch = []
+            all_time = []
+            for i in range(x.shape[0]):
+                job = estimator.run(circuits=[tq2qiskit(q_device=q_dev, m=quantum_layer, x=torch.unsqueeze(x[i], dim=0)) for o in range(len(observables))],
                                      observables=observables)
-
+                all_batch.append(job.result().values)
+                all_time.append(job.usage_estimation)
+            
+            all_batch = torch.tensor(all_batch).float()
+            
             if return_quant_exec_time:
-                return job.result().values, job.usage_estimation
+                return all_batch, all_time
             
             else:
-                return job.result().values
+                return all_batch
             
         else:
 
@@ -727,12 +763,11 @@ class MultiScaleRetention(nn.Module):
                 for obs, value in expval.items():
                     re_order_dict["".join(reversed(obs))] = value
 
-                return [re_order_dict[obs] for obs in observables]
-            
+                return torch.stack([re_order_dict[obs] for obs in observables], dim=-1).float() # dim : [bsz, embed_dim]
             else:
 
                 observable_reversed = "".join(reversed(observables[0]))
-                return expval_joint_sampling(qdev=quantum_layer(q_dev, x, return_q_device=True), observable=observable_reversed, n_shots=self.nb_shots)
+                return expval_joint_sampling(qdev=quantum_layer(q_dev, x, return_q_device=True), observable=observable_reversed, n_shots=self.nb_shots).reshape([x.shape[0],-1]).float() # dim : [bsz, embed_dim]
 
     def forward(
         self,
@@ -746,9 +781,14 @@ class MultiScaleRetention(nn.Module):
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor, Optional[torch.FloatTensor]]:
         B, T, H = hidden_states.size()
 
+        print(B)
+        print(T)
+        print(H)
+
         (sin, cos), decay_mask = rel_pos
 
-        print(decay_mask)
+        print(decay_mask[0].shape)
+        print(decay_mask[1].shape)
         # quantum projections
         v_exp_val = []
         k_exp_val = []
@@ -756,28 +796,34 @@ class MultiScaleRetention(nn.Module):
 
         for t in range(T):
 
-            q_dev = tq.QuantumDevice(n_wires=self.embed_dim, device=self.q_device, bsz=B)
-            v_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), q_dev=q_dev, quantum_layer=self.v_layer, observables=self.v_observables, session=session))
-            q_dev = tq.QuantumDevice(n_wires=self.embed_dim, device=self.q_device, bsz=B)
-            k_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), q_dev=q_dev, quantum_layer=self.k_layer, observables=self.k_observables, session=session))
-            q_dev = tq.QuantumDevice(n_wires=self.embed_dim, device=self.q_device, bsz=B)
-            q_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), q_dev=q_dev, quantum_layer=self.q_layer, observables=self.q_observables, session=session))
+            v_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.v_layer, observables=self.v_observables, session=session))
+
+            k_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.k_layer, observables=self.k_observables, session=session))
+
+            q_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.q_layer, observables=self.q_observables, session=session))
         
         print(v_exp_val)
         print(k_exp_val)
         print(q_exp_val)
 
-        V = torch.tensor(v_exp_val)
-        K = torch.exp((torch.pi / 2) * torch.complex(torch.zeros(T, dtype=torch.float32),torch.tensor(k_exp_val, dtype=torch.float32)))
-        Q = torch.exp((- torch.pi / 2) * torch.complex(torch.zeros(T, dtype=torch.float32),torch.tensor(q_exp_val, dtype=torch.float32)))
+        V = torch.transpose(torch.stack(v_exp_val), 0, 1)
+
+        K = torch.squeeze(torch.transpose(torch.stack(k_exp_val), 0, 1), dim= -1)
+        K = torch.exp((torch.pi / 2) * torch.complex(torch.zeros([B, T], dtype=torch.float32), K))
+
+        Q = torch.squeeze(torch.transpose(torch.stack(q_exp_val), 0, 1), dim= -1)
+        Q = torch.exp( - (torch.pi / 2) * torch.complex(torch.zeros([B, T], dtype=torch.float32), Q))
 
         print(V)
         print(K)
         print(Q)
 
         g = self.g_proj(hidden_states)
+
         # multi-head
-        #q, k, v = split_heads((q, k, v), B, T, self.num_heads)
+        V = V.view(B, T, self.num_heads, -1).transpose(1, 2)
+
+        print(V)
 
         #K *= self.scaling  # for scaled dot product
 

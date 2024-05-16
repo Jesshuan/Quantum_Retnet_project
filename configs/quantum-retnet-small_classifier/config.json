@@ -7,7 +7,7 @@
   "decoder_ffn_embed_dim": 32,
   "decoder_layers": 4,
   "decoder_normalize_before": true,
-  "decoder_retention_heads": 1,
+  "decoder_retention_heads": 2,
   "decoder_value_embed_dim": 8,
   "deepnorm": false,
   "drop_path_rate": 0.0,
