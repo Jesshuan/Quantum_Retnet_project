@@ -180,36 +180,22 @@ class RetNetRelPos(nn.Module):
             mask = torch.masked_fill(
                 index[:, None] - index[None, :], ~mask.bool(), float("inf")
             )
-            print("mask")
-            print(mask)
-            print("decay")
-            print(self.decay[:,None])
             mask = torch.exp(mask * self.decay[:, None])
-            print("result")
-            print(mask)
             mask = torch.nan_to_num(mask)
             mask = mask.unsqueeze(0)  # [1, h, t, t]
-            print(mask)
             if retention_mask is not None:
-                print("retention_mask True !")
                 # this is required for left padding
-                mask = mask * retention_mask.float().view(-1, 1, 1, slen).to(mask)
-                print(mask)
+                mask = mask * retention_mask.float().view(-1, 1, slen).to(mask)
 
             # scaling
-            print("scaling")
             mask = mask / mask.sum(dim=-1, keepdim=True).sqrt()
-            print(mask)
             mask = torch.nan_to_num(mask, nan=0.0)
-            print(mask)
             # decay_scale (used for kv cache)
             if get_decay_scale:
                 decay_scale = self.compute_decay_scale(slen, retention_mask)
             else:
                 decay_scale = None
 
-            print("decay_scale")
-            print(decay_scale)
             # mask processing for intra decay
             if retention_mask is not None:
                 max_non_zero = (
@@ -218,9 +204,6 @@ class RetNetRelPos(nn.Module):
                 intra_decay = mask[range(mask.shape[0]), :, max_non_zero]
             else:
                 intra_decay = mask[:, :, -1]
-
-            print("intra_decay")
-            print(intra_decay)
 
             retention_rel_pos = ((sin, cos), (mask, intra_decay, decay_scale))
 
@@ -558,27 +541,24 @@ class MultiScaleRetention(nn.Module):
         decay_mask,  # (1 or bsz) * num_head * len * len
         """
         decay_mask, intra_decay, scale = decay_mask
-        print("decay_mask")
-        print(decay_mask)
         # just return retention_rel_pos projected
         # TODO: for shardformer
-        print("intra_decay")
-        print(self.decay_proj)
         if self.decay_proj is not None:
             decay_mask = self.decay_proj(decay_mask.transpose(-1, -3)).transpose(-3, -1)
 
         # [b, t, t]
-        print(torch.unsqueeze(q, dim=0))
-        print(k)
         retention = torch.einsum('ij,ik->ijk', q, k).real  # (scaled dot-product)
+        print("KQ init :")
         print(retention)
+        print(retention.shape)
         retention = retention * decay_mask
-        print(retention)
         # invariant after normalization
         retention = retention / retention.detach().abs().sum(
             dim=-1, keepdim=True
         ).clamp(min=1, max=5e4)
+        print("after mask")
         print(retention)
+        print(retention.shape)
         output = retention @ v  # [b, h, t, v_dim / h]
 
         output = output.transpose(1, 2)  # [b, t, h, v_dim / h]
@@ -781,14 +761,8 @@ class MultiScaleRetention(nn.Module):
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor, Optional[torch.FloatTensor]]:
         B, T, H = hidden_states.size()
 
-        print(B)
-        print(T)
-        print(H)
-
         (sin, cos), decay_mask = rel_pos
 
-        print(decay_mask[0].shape)
-        print(decay_mask[1].shape)
         # quantum projections
         v_exp_val = []
         k_exp_val = []
@@ -801,29 +775,22 @@ class MultiScaleRetention(nn.Module):
             k_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.k_layer, observables=self.k_observables, session=session))
 
             q_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.q_layer, observables=self.q_observables, session=session))
-        
-        print(v_exp_val)
-        print(k_exp_val)
-        print(q_exp_val)
 
-        V = torch.transpose(torch.stack(v_exp_val), 0, 1)
 
-        K = torch.squeeze(torch.transpose(torch.stack(k_exp_val), 0, 1), dim= -1)
-        K = torch.exp((torch.pi / 2) * torch.complex(torch.zeros([B, T], dtype=torch.float32), K))
+        V = torch.transpose(torch.stack(v_exp_val).to(hidden_states.device), 0, 1)
 
-        Q = torch.squeeze(torch.transpose(torch.stack(q_exp_val), 0, 1), dim= -1)
-        Q = torch.exp( - (torch.pi / 2) * torch.complex(torch.zeros([B, T], dtype=torch.float32), Q))
+        K = torch.squeeze(torch.transpose(torch.stack(k_exp_val).to(hidden_states.device), 0, 1), dim= -1)
 
-        print(V)
-        print(K)
-        print(Q)
+        zero_tensor = torch.zeros([B, T], dtype=torch.float32, device=hidden_states.device)
+        K = torch.exp((torch.pi / 2) * torch.complex(zero_tensor, K))
+
+        Q = torch.squeeze(torch.transpose(torch.stack(q_exp_val).to(hidden_states.device), 0, 1), dim= -1)
+        Q = torch.exp( - (torch.pi / 2) * torch.complex(zero_tensor, Q))
 
         g = self.g_proj(hidden_states)
 
         # multi-head
-        V = V.view(B, T, self.num_heads, -1).transpose(1, 2)
-
-        print(V)
+        #V = V.view(B, T, self.num_heads, -1).transpose(1, 2)
 
         #K *= self.scaling  # for scaled dot product
 

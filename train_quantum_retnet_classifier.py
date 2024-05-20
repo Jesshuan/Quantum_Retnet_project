@@ -6,6 +6,8 @@ from datasets import load_dataset
 
 import torch
 
+import re
+
 
 from quantum_retnet.modeling_quantum_retnet import RetNetForSequenceClassification
 from quantum_retnet.configuration_quantum_retnet import load_config_from_json
@@ -22,7 +24,7 @@ class MyArgs:
     dataset_name: str = 'sst2'
     text_col: str = 'sentence'
     label_col: str = 'label'
-    max_length: int = 6
+    max_length: int =48
 
 def main():
     parser = HfArgumentParser((TrainingArguments, MyArgs))
@@ -37,14 +39,20 @@ def main():
     model = RetNetForSequenceClassification(config)
 
     tokenizer = AutoTokenizer.from_pretrained('gpt2')
-    tokenizer.model_max_length = 4096
+    tokenizer.model_max_length = 48
     tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.unk_token = tokenizer.eos_token
-    tokenizer.bos_token = tokenizer.eos_token
+    #tokenizer.unk_token = tokenizer.eos_token
+    #tokenizer.bos_token = tokenizer.eos_token
+
+    def transform(sentence):
+        return re.sub('[^A-Za-z0-9.,;!?]+', ' ', sentence) + tokenizer.eos_token
 
     def tokenize_datset(example):
+        #example[args.text_col] = [transform(sentence) for sentence in example[args.text_col]]
+        example[args.text_col] = transform(example[args.text_col])
         input_ids = tokenizer(example[args.text_col],
-                              truncation=True,
+                              #truncation=True,
+                              padding=True,
                               max_length=args.max_length,
                               return_tensors='pt').input_ids[0]
         #label = example[args.label_col]

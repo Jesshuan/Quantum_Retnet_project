@@ -12,10 +12,10 @@ python train_quantum_retnet_classifier.py \
     --weight_decay 0.01 \
     --evaluation_strategy steps \
     --save_strategy steps \
-    --max_steps 100 \
-    --logging_steps 10 \
-    --eval_steps 10 \
-    --save_steps 10 \
+    --max_steps 1000 \
+    --logging_steps 1 \
+    --eval_steps 1 \
+    --save_steps 100 \
     --save_total_limit 10 \
     --per_device_train_batch_size 4 \
     --per_device_eval_batch_size 4 \
