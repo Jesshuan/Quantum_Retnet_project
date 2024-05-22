@@ -13,8 +13,8 @@ python train_quantum_retnet_classifier.py \
     --evaluation_strategy steps \
     --save_strategy steps \
     --max_steps 1000 \
-    --logging_steps 1 \
-    --eval_steps 1 \
+    --logging_steps 2 \
+    --eval_steps 2 \
     --save_steps 100 \
     --save_total_limit 10 \
     --per_device_train_batch_size 4 \
