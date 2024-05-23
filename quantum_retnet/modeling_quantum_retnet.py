@@ -501,6 +501,7 @@ class MultiScaleRetention(nn.Module):
         self.head_dim = self.value_dim // self.num_heads
         self.key_dim = self.embed_dim // self.num_heads
         self.scaling = self.key_dim**-0.5
+        self.coeff_amp = config.coeff_amp
 
         self.gate_fn = get_activation_fn(activation=str(gate_fn))
 
@@ -574,13 +575,19 @@ class MultiScaleRetention(nn.Module):
         print("v.unsqueez(-1)")
         print(v.unsqueeze(-1).shape)
         print("current kv :")
-        # kv cache: [b, h, t, v_dim, qk_dim]
-        current_kv = k.unsqueeze(-1) * v.unsqueeze(-1)
+        # kv cache: [b, t, v_dim]
+        current_kv = k.unsqueeze(-1) * v
         print(current_kv)
         print(current_kv.shape)
-        intra_decay = intra_decay[:, :, :, None, None]  # [b, h, t, 1, 1]
+        print("intra_decay :")
+        print(intra_decay)
+        print(intra_decay.shape)
+        intra_decay = intra_decay[:, :, None]  # [b, t, 1]
 
-        current_kv = (current_kv * intra_decay).sum(2)  # [b, h, v_dim, qk_dim]
+        current_kv = (current_kv * intra_decay).sum(1)  # [b, h, v_dim, qk_dim]
+
+        print("current_kv :")
+        print(current_kv)
 
         cache = {"prev_key_value": current_kv, "scale": scale}
         return output, cache, retention
@@ -785,11 +792,14 @@ class MultiScaleRetention(nn.Module):
         V = torch.transpose(torch.stack(v_exp_val).to(hidden_states.device), 0, 1)
 
         K = torch.squeeze(torch.transpose(torch.stack(k_exp_val).to(hidden_states.device), 0, 1), dim= -1)
+        Q = torch.squeeze(torch.transpose(torch.stack(q_exp_val).to(hidden_states.device), 0, 1), dim= -1)
+
+        for _ in range(self.coeff_amp):
+            K = torch.sin((torch.pi / 2) * K)
+            Q = torch.sin((torch.pi / 2) * Q)
 
         zero_tensor = torch.zeros([B, T], dtype=torch.float32, device=hidden_states.device)
         K = torch.exp((torch.pi / 2) * torch.complex(zero_tensor, K))
-
-        Q = torch.squeeze(torch.transpose(torch.stack(q_exp_val).to(hidden_states.device), 0, 1), dim= -1)
         Q = torch.exp( - (torch.pi / 2) * torch.complex(zero_tensor, Q))
 
         g = self.g_proj(hidden_states)

@@ -21,7 +21,8 @@ python train_quantum_retnet_classifier.py \
     --per_device_eval_batch_size 4 \
     --gradient_accumulation_steps 4 \
     --gradient_checkpointing True \
-    --fp16 True \
     --load_best_model_at_end True \
     --metric_for_best_model eval_loss \
     --greater_is_better False
+
+#--fp16 True \

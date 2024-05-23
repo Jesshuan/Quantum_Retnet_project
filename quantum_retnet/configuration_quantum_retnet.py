@@ -19,8 +19,6 @@ class QuantumRetNetConfig(PretrainedConfig):
     dropout: float = 0.0  # dropout probability
     activation_dropout: float = 0.0  # dropout probability after activation in FFN.
     drop_path_rate: float = 0.0
-    nb_shots: int = 1024
-    q_device: str = "default.qubit"
     decoder_embed_dim: int = 768  # decoder embedding dimension
     decoder_value_embed_dim: int = 1280  # decoder value embedding dimension
     decoder_ffn_embed_dim: int = 1280  # decoder embedding dimension for FFN
@@ -70,6 +68,9 @@ class QuantumRetNetConfig(PretrainedConfig):
             use_ffn_rms_norm: bool = False,  # use RMSNorm instead of LayerNorm in FFN
             layernorm_eps: float = 1e-6,
             tie_word_embeddings: bool = False,
+            nb_shots: int = 1024,
+            q_device: str = "default.qubit",
+            coeff_amp: int = 1,
             **kwargs):
         self.vocab_size = vocab_size
         self.initializer_range = initializer_range
@@ -98,6 +99,10 @@ class QuantumRetNetConfig(PretrainedConfig):
         # Blockwise
         self.recurrent_chunk_size = recurrent_chunk_size
         self.forward_impl = forward_impl
+        # Quantum
+        self.nb_shots = nb_shots
+        self.q_device = q_device
+        self.coeff_amp = coeff_amp
 
         if self.deepnorm:
             self.decoder_normalize_before = False
