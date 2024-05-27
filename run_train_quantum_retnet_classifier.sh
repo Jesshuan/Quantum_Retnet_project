@@ -13,8 +13,8 @@ python train_quantum_retnet_classifier.py \
     --evaluation_strategy steps \
     --save_strategy steps \
     --max_steps 1000 \
-    --logging_steps 2 \
-    --eval_steps 2 \
+    --logging_steps 10 \
+    --eval_steps 100 \
     --save_steps 100 \
     --save_total_limit 10 \
     --per_device_train_batch_size 4 \
@@ -23,6 +23,7 @@ python train_quantum_retnet_classifier.py \
     --gradient_checkpointing True \
     --load_best_model_at_end True \
     --metric_for_best_model eval_loss \
+    --fp16 True \
     --greater_is_better False
 
-#--fp16 True \
+# \

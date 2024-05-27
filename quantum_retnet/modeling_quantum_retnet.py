@@ -549,14 +549,12 @@ class MultiScaleRetention(nn.Module):
 
         # [b, t, t]
         retention = torch.einsum('ij,ik->ijk', q, k).real  # (scaled dot-product)
-        print("KQ init :")
-        print(retention.shape)
+
         retention = retention * decay_mask
         # invariant after normalization
         retention = retention / retention.detach().abs().sum(
             dim=-1, keepdim=True
         ).clamp(min=1, max=5e4)
-        print("after mask")
         print(retention)
         print(retention.shape)
         output = retention @ v  # [b, h, t, v_dim / h]
@@ -570,24 +568,13 @@ class MultiScaleRetention(nn.Module):
             intra_decay = self.decay_proj(intra_decay.transpose(-1, -2)).transpose(
                 -2, -1
             )
-        print("k.unsqueez(-1)")
-        print(k.unsqueeze(-1).shape)
-        print("v.unsqueez(-1)")
-        print(v.unsqueeze(-1).shape)
-        print("current kv :")
+
         # kv cache: [b, t, v_dim]
         current_kv = k.unsqueeze(-1) * v
-        print(current_kv)
-        print(current_kv.shape)
-        print("intra_decay :")
-        print(intra_decay)
-        print(intra_decay.shape)
+
         intra_decay = intra_decay[:, :, None]  # [b, t, 1]
 
         current_kv = (current_kv * intra_decay).sum(1)  # [b, h, v_dim, qk_dim]
-
-        print("current_kv :")
-        print(current_kv)
 
         cache = {"prev_key_value": current_kv, "scale": scale}
         return output, cache, retention

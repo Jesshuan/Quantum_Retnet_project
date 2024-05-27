@@ -280,6 +280,8 @@ class MultiScaleRetention(nn.Module):
             dim=-1, keepdim=True
         ).clamp(min=1, max=5e4)
 
+        print(retention)
+
         output = retention @ v  # [b, h, t, v_dim / h]
 
         output = output.transpose(1, 2)  # [b, t, h, v_dim / h]
