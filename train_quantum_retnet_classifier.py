@@ -24,7 +24,7 @@ class MyArgs:
     dataset_name: str = 'sst2'
     text_col: str = 'sentence'
     label_col: str = 'label'
-    max_length: int =48
+    max_length: int = 12
 
 def main():
     parser = HfArgumentParser((TrainingArguments, MyArgs))
@@ -34,12 +34,23 @@ def main():
     train_dataset = load_dataset(args.dataset_name, split="train")
     eval_dataset = load_dataset(args.dataset_name, split="validation")
 
-    config = load_config_from_json(f"configs/quantum-retnet-{args.model_size}/config.json")
+    try:
+        model = RetNetForSequenceClassification.from_pretrained(MODEL_STORE_PATH)
+
+        print('Model imported from a saved file...')
+    except:
+        raise Exception("Load impossible")
+        config = load_config_from_json(f"configs/{args.model_size}/config.json")
+        model = RetNetForSequenceClassification(config)
+
+        print('Model instanciated...')
+
+    config = load_config_from_json(f"configs/{args.model_size}/config.json")
 
     model = RetNetForSequenceClassification(config)
 
     tokenizer = AutoTokenizer.from_pretrained('gpt2')
-    tokenizer.model_max_length = 48
+    tokenizer.model_max_length = 12
     tokenizer.pad_token = tokenizer.eos_token
     #tokenizer.unk_token = tokenizer.eos_token
     #tokenizer.bos_token = tokenizer.eos_token
@@ -51,8 +62,8 @@ def main():
         #example[args.text_col] = [transform(sentence) for sentence in example[args.text_col]]
         example[args.text_col] = transform(example[args.text_col])
         input_ids = tokenizer(example[args.text_col],
-                              #truncation=True,
-                              padding=True,
+                              truncation=True,
+                              padding='max_length',
                               max_length=args.max_length,
                               return_tensors='pt').input_ids[0]
         #label = example[args.label_col]
@@ -71,8 +82,8 @@ def main():
     if train_args.do_train:
         trainer.train()
         trainer.save_model(output_dir=MODEL_STORE_PATH)
-    if train_args.do_eval:
-        trainer.evaluate()
+    #if train_args.do_eval:
+        #trainer.evaluate()
 
 
 if __name__ == "__main__":
