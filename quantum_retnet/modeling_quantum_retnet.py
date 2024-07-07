@@ -31,6 +31,14 @@ from torchquantum.plugin.qiskit import tq2qiskit
 
 from qiskit_ibm_runtime import QiskitRuntimeService, Options, Sampler, Session, Estimator
 
+from qiskit.quantum_info import SparsePauliOp
+
+from qiskit.providers.fake_provider import GenericBackendV2
+
+from qiskit.primitives import BackendEstimator
+
+
+
 from qiskit.transpiler.preset_passmanagers import generate_preset_pass_manager
 
 from torchquantum.measurement import expval_joint_analytical, expval_joint_sampling, expval_joint_sampling_grouping
@@ -232,12 +240,25 @@ class RetNetRelPos(nn.Module):
     
 
 class QLayer(tq.QuantumModule):
-    def __init__(self, n_qbits, D_ansatz=1, *args, **kwargs):
+    def __init__(self, n_qbits=4, D_ansatz=1, embed_dim=None, *args, **kwargs):
         super().__init__()    
         self.n_wires = n_qbits
-        self.encoder = tq.GeneralEncoder(
-                    [{'input_idx': [i], 'func': 'rx', 'wires': [i]} for i in range(self.n_wires)])
+        self.D_ansatz = D_ansatz
+        if embed_dim is not None:
+            assert embed_dim % n_qbits == 0, f"Problem : we have an incompatibility between embed dim : {embed_dim} and nb_qubits : {n_qbits}... N_qubits must divide embed_din."
+            self.embed_dim = embed_dim
+        else:
+            self.embed_dim = n_qbits
+        """
+        input_list = []
 
+        for i in range(self.embed_dim // self.n_wires):
+
+            input_list.append({'input_idx': [i + j], 'func': 'rx', 'wires': [j]} for j in range(self.n_wires))
+
+        self.encoder = tq.GeneralEncoder(input_list)"""
+
+        self.encoder = tq.GeneralEncoder([{'input_idx': [i], 'func': 'rx', 'wires': [i]} for i in range(self.n_wires)])
 
         if n_qbits >= 2:
             self.rx_0 = tq.RX(has_params=True, trainable=True)
@@ -341,6 +362,109 @@ class QLayer(tq.QuantumModule):
             self.ry_2_30 = tq.RY(has_params=True, trainable=True)
             self.ry_2_31 = tq.RY(has_params=True, trainable=True)
 
+        if self.D_ansatz >= 2:
+            if n_qbits >= 2:
+                self.rx_0_b = tq.RX(has_params=True, trainable=True)
+                self.rx_1_b = tq.RX(has_params=True, trainable=True)
+                self.ry_1_0_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_1_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_0_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_1_b = tq.RY(has_params=True, trainable=True)
+            if n_qbits >= 4:
+                self.rx_2_b = tq.RX(has_params=True, trainable=True)
+                self.rx_3_b = tq.RX(has_params=True, trainable=True)
+                self.ry_1_2_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_3_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_2_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_3_b = tq.RY(has_params=True, trainable=True)
+            if n_qbits >= 8:
+                self.rx_4_b = tq.RX(has_params=True, trainable=True)
+                self.rx_5_b = tq.RX(has_params=True, trainable=True)
+                self.rx_6_b = tq.RX(has_params=True, trainable=True)
+                self.rx_7_b = tq.RX(has_params=True, trainable=True)
+                self.ry_1_4_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_5_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_6_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_7_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_4_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_5_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_6_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_7_b = tq.RY(has_params=True, trainable=True)
+            if n_qbits >= 16:
+                self.rx_8_b = tq.RX(has_params=True, trainable=True)
+                self.rx_9_b = tq.RX(has_params=True, trainable=True)
+                self.rx_10_b = tq.RX(has_params=True, trainable=True)
+                self.rx_11_b = tq.RX(has_params=True, trainable=True)
+                self.rx_12_b = tq.RX(has_params=True, trainable=True)
+                self.rx_13_b = tq.RX(has_params=True, trainable=True)
+                self.rx_14_b = tq.RX(has_params=True, trainable=True)
+                self.rx_15_b = tq.RX(has_params=True, trainable=True)
+                self.ry_1_8_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_9_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_10_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_11_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_12_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_13_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_14_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_15_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_8_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_9_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_10_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_11_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_12_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_13_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_14_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_15_b = tq.RY(has_params=True, trainable=True)
+            if n_qbits >= 32:
+                self.rx_16_b = tq.RX(has_params=True, trainable=True)
+                self.rx_17_b = tq.RX(has_params=True, trainable=True)
+                self.rx_18_b = tq.RX(has_params=True, trainable=True)
+                self.rx_19_b = tq.RX(has_params=True, trainable=True)
+                self.rx_20_b = tq.RX(has_params=True, trainable=True)
+                self.rx_21_b = tq.RX(has_params=True, trainable=True)
+                self.rx_22_b = tq.RX(has_params=True, trainable=True)
+                self.rx_23_b = tq.RX(has_params=True, trainable=True)
+                self.rx_24_b = tq.RX(has_params=True, trainable=True)
+                self.rx_25_b = tq.RX(has_params=True, trainable=True)
+                self.rx_26_b = tq.RX(has_params=True, trainable=True)
+                self.rx_27_b = tq.RX(has_params=True, trainable=True)
+                self.rx_28_b = tq.RX(has_params=True, trainable=True)
+                self.rx_29_b = tq.RX(has_params=True, trainable=True)
+                self.rx_30_b = tq.RX(has_params=True, trainable=True)
+                self.rx_31_b = tq.RX(has_params=True, trainable=True)
+                self.ry_1_16_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_17_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_18_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_19_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_20_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_21_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_22_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_23_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_24_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_25_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_26_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_27_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_28_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_29_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_30_b = tq.RY(has_params=True, trainable=True)
+                self.ry_1_31_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_16_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_17_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_18_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_19_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_20_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_21_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_22_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_23_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_24_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_25_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_26_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_27_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_28_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_29_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_30_b = tq.RY(has_params=True, trainable=True)
+                self.ry_2_31_b = tq.RY(has_params=True, trainable=True)
+
             #self.observables = SparsePauliOp.from_list([("ZX" + "I"*(n_qbits - 2),1), ("XY" + "I"*(n_qbits - 2),1)] + [("I"*i + "Z" + "I"*(n_qbits - 1 -i), 1) for i in range(n_qbits)])
             #self.measure = tq.MeasureAll(tq.PauliZ)
             #self.measure = tq.MeasureMultiPauliSum(self.observables)
@@ -383,6 +507,45 @@ class QLayer(tq.QuantumModule):
             self.rx_29(q_device, wires=29)
             self.rx_30(q_device, wires=30)
             self.rx_31(q_device, wires=31)
+
+    def ansatz_gate_forward_rx_b(self, q_device):
+        if self.n_wires >= 2:
+            self.rx_0_b(q_device, wires=0)
+            self.rx_1_b(q_device, wires=1)
+        if self.n_wires >= 4:
+            self.rx_2_b(q_device, wires=2)
+            self.rx_3_b(q_device, wires=3)
+        if self.n_wires >= 8:
+            self.rx_4_b(q_device, wires=4)
+            self.rx_5_b(q_device, wires=5)
+            self.rx_6_b(q_device, wires=6)
+            self.rx_7_b(q_device, wires=7)
+        if self.n_wires >= 16:
+            self.rx_8_b(q_device, wires=8)
+            self.rx_9_b(q_device, wires=9)
+            self.rx_10_b(q_device, wires=10)
+            self.rx_11_b(q_device, wires=11)
+            self.rx_12_b(q_device, wires=12)
+            self.rx_13_b(q_device, wires=13)
+            self.rx_14_b(q_device, wires=14)
+            self.rx_15_b(q_device, wires=15)
+        if self.n_wires >= 32:
+            self.rx_16_b(q_device, wires=16)
+            self.rx_17_b(q_device, wires=17)
+            self.rx_18_b(q_device, wires=18)
+            self.rx_19_b(q_device, wires=19)
+            self.rx_20_b(q_device, wires=20)
+            self.rx_21_b(q_device, wires=21)
+            self.rx_22_b(q_device, wires=22)
+            self.rx_23_b(q_device, wires=23)
+            self.rx_24_b(q_device, wires=24)
+            self.rx_25_b(q_device, wires=25)
+            self.rx_26_b(q_device, wires=26)
+            self.rx_27_b(q_device, wires=27)
+            self.rx_28_b(q_device, wires=26)
+            self.rx_29_b(q_device, wires=29)
+            self.rx_30_b(q_device, wires=30)
+            self.rx_31_b(q_device, wires=31)
         
     def ansatz_gate_forward_ry_1(self, q_device):
         if self.n_wires >= 2:
@@ -423,6 +586,45 @@ class QLayer(tq.QuantumModule):
             self.ry_1_30(q_device, wires=30)
             self.ry_1_31(q_device, wires=31)
 
+    def ansatz_gate_forward_ry_1_b(self, q_device):
+        if self.n_wires >= 2:
+            self.ry_1_0_b(q_device, wires=0)
+            self.ry_1_1_b(q_device, wires=1)
+        if self.n_wires >= 4:
+            self.ry_1_2_b(q_device, wires=2)
+            self.ry_1_3_b(q_device, wires=3)
+        if self.n_wires >= 8:
+            self.ry_1_4_b(q_device, wires=4)
+            self.ry_1_5_b(q_device, wires=5)
+            self.ry_1_6_b(q_device, wires=6)
+            self.ry_1_7_b(q_device, wires=7)
+        if self.n_wires >= 16:
+            self.ry_1_8_b(q_device, wires=8)
+            self.ry_1_9_b(q_device, wires=9)
+            self.ry_1_10_b(q_device, wires=10)
+            self.ry_1_11_b(q_device, wires=11)
+            self.ry_1_12_b(q_device, wires=12)
+            self.ry_1_13_b(q_device, wires=13)
+            self.ry_1_14_b(q_device, wires=14)
+            self.ry_1_15_b(q_device, wires=15)
+        if self.n_wires >= 32:
+            self.ry_1_16_b(q_device, wires=16)
+            self.ry_1_17_b(q_device, wires=17)
+            self.ry_1_18_b(q_device, wires=18)
+            self.ry_1_19_b(q_device, wires=19)
+            self.ry_1_20_b(q_device, wires=20)
+            self.ry_1_21_b(q_device, wires=21)
+            self.ry_1_22_b(q_device, wires=22)
+            self.ry_1_23_b(q_device, wires=23)
+            self.ry_1_24_b(q_device, wires=24)
+            self.ry_1_25_b(q_device, wires=25)
+            self.ry_1_26_b(q_device, wires=26)
+            self.ry_1_27_b(q_device, wires=27)
+            self.ry_1_28_b(q_device, wires=26)
+            self.ry_1_29_b(q_device, wires=29)
+            self.ry_1_30_b(q_device, wires=30)
+            self.ry_1_31_b(q_device, wires=31)
+
     def ansatz_gate_forward_ry_2(self, q_device):
         if self.n_wires >= 2:
             self.ry_2_0(q_device, wires=0)
@@ -462,6 +664,45 @@ class QLayer(tq.QuantumModule):
             self.ry_2_30(q_device, wires=30)
             self.ry_2_31(q_device, wires=31)
         
+    def ansatz_gate_forward_ry_2_b(self, q_device):
+        if self.n_wires >= 2:
+            self.ry_2_0_b(q_device, wires=0)
+            self.ry_2_1_b(q_device, wires=1)
+        if self.n_wires >= 4:
+            self.ry_2_2_b(q_device, wires=2)
+            self.ry_2_3_b(q_device, wires=3)
+        if self.n_wires >= 8:
+            self.ry_2_4_b(q_device, wires=4)
+            self.ry_2_5_b(q_device, wires=5)
+            self.ry_2_6_b(q_device, wires=6)
+            self.ry_2_7_b(q_device, wires=7)
+        if self.n_wires >= 16:
+            self.ry_2_8_b(q_device, wires=8)
+            self.ry_2_9_b(q_device, wires=9)
+            self.ry_2_10_b(q_device, wires=10)
+            self.ry_2_11_b(q_device, wires=11)
+            self.ry_2_12_b(q_device, wires=12)
+            self.ry_2_13_b(q_device, wires=13)
+            self.ry_2_14_b(q_device, wires=14)
+            self.ry_2_15_b(q_device, wires=15)
+        if self.n_wires >= 32:
+            self.ry_2_16_b(q_device, wires=16)
+            self.ry_2_17_b(q_device, wires=17)
+            self.ry_2_18_b(q_device, wires=18)
+            self.ry_2_19_b(q_device, wires=19)
+            self.ry_2_20_b(q_device, wires=20)
+            self.ry_2_21_b(q_device, wires=21)
+            self.ry_2_22_b(q_device, wires=22)
+            self.ry_2_23_b(q_device, wires=23)
+            self.ry_2_24_b(q_device, wires=24)
+            self.ry_2_25_b(q_device, wires=25)
+            self.ry_2_26_b(q_device, wires=26)
+            self.ry_2_27_b(q_device, wires=27)
+            self.ry_2_28_b(q_device, wires=26)
+            self.ry_2_29_b(q_device, wires=29)
+            self.ry_2_30_b(q_device, wires=30)
+            self.ry_2_31_b(q_device, wires=31)
+
     @tq.static_support
     def forward(self, q_device, x, return_q_device=False):
         self.encoder(q_device, x)
@@ -476,6 +717,18 @@ class QLayer(tq.QuantumModule):
                 tqf.cnot(q_device, wires=[k, k+1], static=self.static_mode, parent_graph=self.graph)
 
         self.ansatz_gate_forward_ry_2(q_device)
+
+        if self.D_ansatz >= 2:
+            self.ansatz_gate_forward_rx_b(q_device)
+            self.ansatz_gate_forward_ry_1_b(q_device)
+
+            for k in range(self.n_wires):
+                if k==self.n_wires-1:
+                    tqf.cnot(q_device, wires=[k, 0], static=self.static_mode, parent_graph=self.graph) 
+                else:
+                    tqf.cnot(q_device, wires=[k, k+1], static=self.static_mode, parent_graph=self.graph)
+
+            self.ansatz_gate_forward_ry_2_b(q_device)
 
         q_device = q_device.bfloat16()
         
@@ -498,10 +751,25 @@ class MultiScaleRetention(nn.Module):
         self.num_heads = config.decoder_retention_heads
         self.nb_shots = config.nb_shots
         self.q_device = config.q_device
+        self.n_qbits = config.n_qbits
+        self.D_ansatz = config.D_ansatz
         self.head_dim = self.value_dim // self.num_heads
         self.key_dim = self.embed_dim // self.num_heads
         self.scaling = self.key_dim**-0.5
         self.coeff_amp = config.coeff_amp
+        self.backend = config.backend
+        if self.backend=="fake":
+            self.service_backend = GenericBackendV2(num_qubits=self.embed_dim)
+            self.session = "fake"
+            print(f"Choosen backend : {self.backend} and session : {self.session}")
+        elif self.backend is not None:
+            service = QiskitRuntimeService(channel="ibm_quantum", token=config.token)
+            self.service_backend = service.backend(self.backend)
+            self.session = Session(backend=self.service_backend)
+            print(f"Choosen backend : {self.backend} and session : {self.session}")
+        else:
+            self.session = None
+            print(f"Choosen backend : {self.backend} and session : {self.session}")
 
         self.gate_fn = get_activation_fn(activation=str(gate_fn))
 
@@ -509,9 +777,9 @@ class MultiScaleRetention(nn.Module):
         self.q_observables = ["XY" *(self.embed_dim//2)]
         self.v_observables = ["I"*i + "ZX"+ "I"*(self.embed_dim - 2 - i) for i in range(self.embed_dim - 1)] + ["XX" + "I"*(self.embed_dim - 2)]
 
-        self.k_layer = QLayer(self.embed_dim)
-        self.q_layer = QLayer(self.embed_dim)
-        self.v_layer = QLayer(self.embed_dim)
+        self.k_layer = QLayer(n_qbits=self.n_qbits, embed_dim=self.embed_dim, D_ansatz=self.D_ansatz)
+        self.q_layer = QLayer(n_qbits=self.n_qbits, embed_dim=self.embed_dim, D_ansatz=self.D_ansatz)
+        self.v_layer = QLayer(n_qbits=self.n_qbits, embed_dim=self.embed_dim, D_ansatz=self.D_ansatz)
 
         self.g_proj = nn.Linear(self.embed_dim, self.value_dim, bias=use_bias)
 
@@ -555,8 +823,6 @@ class MultiScaleRetention(nn.Module):
         retention = retention / retention.detach().abs().sum(
             dim=-1, keepdim=True
         ).clamp(min=1, max=5e4)
-        print(retention)
-        print(retention.shape)
         output = retention @ v  # [b, h, t, v_dim / h]
 
         output = output.transpose(1, 2)  # [b, t, h, v_dim / h]
@@ -707,23 +973,51 @@ class MultiScaleRetention(nn.Module):
         cache = {"prev_key_value": kv_state.transpose(-2, -1), "scale": decay_scale}
         return output, cache
     
-    def get_exp_from_observables(self, x, quantum_layer, observables, session=None, return_quant_exec_time = False):
+    def get_exp_from_observables(self, x, quantum_layer, observables, return_quant_exec_time = False):
         
         q_dev = tq.QuantumDevice(n_wires=self.embed_dim, device=self.q_device, bsz=x.shape[0])
 
-        if session is not None:
+        if self.session=="fake":
+
+            all_batch = []
+
+            for i in range(x.shape[0]):
+
+                estimator = BackendEstimator(backend = self.service_backend)
+
+                circuits = [tq2qiskit(q_device=q_dev, m=quantum_layer, x=torch.unsqueeze(x[i], dim=0)) for _ in range(len(observables))]
+
+                job = estimator.run(circuits=circuits, observables=observables)
+
+                all_batch.append(job.result().values)
+
+            all_batch = torch.tensor(np.array(all_batch, dtype=np.float16)).float()
+
+            return all_batch
+
+
+        elif self.session is not None:
             options = Options(optimization_level=1, execution={"shots":self.nb_shots})
-            estimator = Estimator(session=session, options=options)
+            estimator = Estimator(session=self.session, options=options)
+
+            pm = generate_preset_pass_manager(optimization_level=1, target=self.service_backend.target)
 
             all_batch = []
             all_time = []
             for i in range(x.shape[0]):
-                job = estimator.run(circuits=[tq2qiskit(q_device=q_dev, m=quantum_layer, x=torch.unsqueeze(x[i], dim=0)) for o in range(len(observables))],
-                                     observables=observables)
+
+                isa_circuit = pm.run(tq2qiskit(q_device=q_dev, m=quantum_layer, x=torch.unsqueeze(x[i], dim=0)))
+
+                isa_circuits = [isa_circuit for _ in range(len(observables))]
+
+                isa_observables = [SparsePauliOp(obs).apply_layout(isa_circuit.layout) for obs in observables]
+                
+                job = estimator.run(circuits=isa_circuits, observables=isa_observables)
+                
                 all_batch.append(job.result().values)
                 all_time.append(job.usage_estimation)
             
-            all_batch = torch.tensor(all_batch).float()
+            all_batch = torch.tensor(np.array(all_batch, dtype=np.float16)).float()
             
             if return_quant_exec_time:
                 return all_batch, all_time
@@ -755,7 +1049,6 @@ class MultiScaleRetention(nn.Module):
         retention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         forward_impl: str = "parallel",
-        session = None,
         output_retentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, torch.FloatTensor, Optional[torch.FloatTensor]]:
         B, T, H = hidden_states.size()
@@ -769,17 +1062,17 @@ class MultiScaleRetention(nn.Module):
 
         for t in range(T):
 
-            v_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.v_layer, observables=self.v_observables, session=session))
+            v_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.v_layer, observables=self.v_observables))
 
-            k_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.k_layer, observables=self.k_observables, session=session))
+            k_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.k_layer, observables=self.k_observables))
 
-            q_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.q_layer, observables=self.q_observables, session=session))
+            q_exp_val.append(self.get_exp_from_observables(x=hidden_states[:, t, :].clone(), quantum_layer=self.q_layer, observables=self.q_observables))
 
 
         V = torch.transpose(torch.stack(v_exp_val).to(hidden_states.device), 0, 1)
 
-        K = torch.squeeze(torch.transpose(torch.stack(k_exp_val).to(hidden_states.device), 0, 1), dim= -1)
-        Q = torch.squeeze(torch.transpose(torch.stack(q_exp_val).to(hidden_states.device), 0, 1), dim= -1)
+        K = torch.squeeze(torch.transpose(torch.stack(k_exp_val).to(hidden_states.device), 0, 1), dim= -1 )
+        Q = torch.squeeze(torch.transpose(torch.stack(q_exp_val).to(hidden_states.device), 0, 1), dim= -1 )
 
         for _ in range(self.coeff_amp):
             K = torch.sin((torch.pi / 2) * K)
@@ -1005,7 +1298,7 @@ class RetNetDecoderLayer(nn.Module):
             retention_mask=retention_mask,
             past_key_value=past_key_value,
             forward_impl=forward_impl,
-            output_retentions=output_retentions,
+            output_retentions=output_retentions
         )
         hidden_states = msr_outs[0]
         curr_kv = msr_outs[1]
@@ -1216,7 +1509,7 @@ class RetNetModel(RetNetPreTrainedModel):
         return_dict: Optional[bool] = None,
         forward_impl: Optional[str] = "parallel",
         recurrent_chunk_size: Optional[int] = None,
-        retention_rel_pos: Optional[Tuple[torch.Tensor]] = None,
+        retention_rel_pos: Optional[Tuple[torch.Tensor]] = None
     ) -> Union[Tuple, RetNetOutputWithPast]:
         if output_retentions is None and output_attentions is not None:
             output_retentions = output_attentions
@@ -1319,7 +1612,7 @@ class RetNetModel(RetNetPreTrainedModel):
                     retention_mask=retention_mask,
                     forward_impl=forward_impl,
                     past_key_value=past_key_value,
-                    output_retentions=output_retentions,
+                    output_retentions=output_retentions
                 )
 
             hidden_states = layer_outputs[0]
@@ -1449,7 +1742,7 @@ class RetNetForCausalLM(RetNetPreTrainedModel):
         return_dict: Optional[bool] = None,
         forward_impl: Optional[str] = None,
         recurrent_chunk_size: Optional[int] = None,
-        retention_rel_pos: Optional[Tuple[torch.Tensor]] = None,
+        retention_rel_pos: Optional[Tuple[torch.Tensor]] = None
     ) -> Union[Tuple, RetNetCausalLMOutputWithPast]:
         if output_retentions is None and output_attentions is not None:
             output_retentions = output_attentions
@@ -1489,7 +1782,7 @@ class RetNetForCausalLM(RetNetPreTrainedModel):
             forward_impl=forward_impl,
             use_cache=use_cache,
             recurrent_chunk_size=recurrent_chunk_size,
-            retention_rel_pos=retention_rel_pos,
+            retention_rel_pos=retention_rel_pos
         )
 
         hidden_states = outputs[0]
@@ -1702,7 +1995,7 @@ class RetNetForSequenceClassification(RetNetPreTrainedModel):
         return_dict: Optional[bool] = None,
         forward_impl: Optional[str] = None,
         recurrent_chunk_size: Optional[int] = None,
-        retention_rel_pos: Optional[Tuple[torch.Tensor]] = None,
+        retention_rel_pos: Optional[Tuple[torch.Tensor]] = None
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         if output_retentions is None and output_attentions is not None:
             output_retentions = output_attentions
@@ -1742,7 +2035,7 @@ class RetNetForSequenceClassification(RetNetPreTrainedModel):
             forward_impl=forward_impl,
             use_cache=use_cache,
             recurrent_chunk_size=recurrent_chunk_size,
-            retention_rel_pos=retention_rel_pos,
+            retention_rel_pos=retention_rel_pos
         )
 
         hidden_states = outputs[0]

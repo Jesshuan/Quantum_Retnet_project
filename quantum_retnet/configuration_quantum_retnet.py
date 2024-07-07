@@ -1,13 +1,26 @@
 from dataclasses import dataclass
 import json
 
+from dotenv import dotenv_values
+
 from transformers.configuration_utils import PretrainedConfig
 
+from qiskit_ibm_runtime import QiskitRuntimeService, Options, Sampler, Session, Estimator
 
-def load_config_from_json(config_file):
+
+def load_config_from_json(config_file, backend=None, token_env_path: str = None):
     with open(config_file, 'r') as f:
         config = json.load(f)
-        config = QuantumRetNetConfig.from_dict(config)
+
+    if backend=="fake":
+        config['backend'] = backend
+
+    elif backend is not None:
+        config_env = dotenv_values(token_env_path)
+        config["token"] = config_env["IBM_TOKEN"]
+        config["backend"] =  backend
+
+    config = QuantumRetNetConfig.from_dict(config)
     return config
 
 
@@ -71,6 +84,11 @@ class QuantumRetNetConfig(PretrainedConfig):
             nb_shots: int = 1024,
             q_device: str = "default.qubit",
             coeff_amp: int = 1,
+            n_qbits: int = 4,
+            D_ansatz: int = 1,
+            backend: str = None,
+            token: str = None,
+
             **kwargs):
         self.vocab_size = vocab_size
         self.initializer_range = initializer_range
@@ -102,7 +120,11 @@ class QuantumRetNetConfig(PretrainedConfig):
         # Quantum
         self.nb_shots = nb_shots
         self.q_device = q_device
+        self.n_qbits = n_qbits
+        self.D_ansatz = D_ansatz
         self.coeff_amp = coeff_amp
+        self.backend = backend
+        self.token = token
 
         if self.deepnorm:
             self.decoder_normalize_before = False

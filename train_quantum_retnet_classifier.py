@@ -6,6 +6,8 @@ from datasets import load_dataset
 
 import torch
 
+import pickle
+
 import re
 
 
@@ -14,8 +16,15 @@ from quantum_retnet.configuration_quantum_retnet import load_config_from_json
 
 torch.cuda.empty_cache()
 
-
 MODEL_STORE_PATH = "./model_store/model_small_quantum_classifier/"
+
+TRAIN_DATASET_PATH = "./dataset_store/train_dataset_for_classifier"
+
+TEST_DATASET_PATH = "./dataset_store/test_dataset_for_classifier"
+
+TOKEN_ENV_PATH = "./.env"
+
+BACKEND = None
 
 
 @dataclass
@@ -24,33 +33,54 @@ class MyArgs:
     dataset_name: str = 'sst2'
     text_col: str = 'sentence'
     label_col: str = 'label'
-    max_length: int = 12
+    max_length: int = 30
+    #backend: str="ibm_brisbane"
 
 def main():
     parser = HfArgumentParser((TrainingArguments, MyArgs))
 
     train_args, args = parser.parse_args_into_dataclasses()
 
-    train_dataset = load_dataset(args.dataset_name, split="train")
-    eval_dataset = load_dataset(args.dataset_name, split="validation")
+    # Train / Eval dataset
+
+    try:
+        with open(TRAIN_DATASET_PATH, "rb") as f:
+            train_dataset = pickle.load(f)
+
+        with open(TEST_DATASET_PATH, "rb") as f:
+            eval_dataset = pickle.load(f)
+
+        print("Datasets train/eval imported...")
+
+    except:
+
+        # Split
+
+        train_dataset = load_dataset(args.dataset_name, split="train")
+        eval_dataset = load_dataset(args.dataset_name, split="validation")
+
+        with open(TRAIN_DATASET_PATH, "wb") as f:
+            pickle.dump(train_dataset, f)
+
+        with open(TEST_DATASET_PATH, "wb") as f:
+            pickle.dump(eval_dataset, f)
+
+        print("Datasets train/eval re-builded...")
 
     try:
         model = RetNetForSequenceClassification.from_pretrained(MODEL_STORE_PATH)
 
         print('Model imported from a saved file...')
     except:
-        raise Exception("Load impossible")
-        config = load_config_from_json(f"configs/{args.model_size}/config.json")
+        #config = load_config_from_json(f"configs/{args.model_size}/config.json", backend=args.backend, token_env_path=TOKEN_ENV_PATH)
+        #config = load_config_from_json(f"configs/{args.model_size}/config.json")
+        config = load_config_from_json(f"configs/{args.model_size}/config.json", backend=BACKEND)
         model = RetNetForSequenceClassification(config)
 
         print('Model instanciated...')
 
-    config = load_config_from_json(f"configs/{args.model_size}/config.json")
-
-    model = RetNetForSequenceClassification(config)
-
     tokenizer = AutoTokenizer.from_pretrained('gpt2')
-    tokenizer.model_max_length = 12
+    #tokenizer.model_max_length = 12
     tokenizer.pad_token = tokenizer.eos_token
     #tokenizer.unk_token = tokenizer.eos_token
     #tokenizer.bos_token = tokenizer.eos_token
@@ -65,9 +95,9 @@ def main():
                               truncation=True,
                               padding='max_length',
                               max_length=args.max_length,
-                              return_tensors='pt').input_ids[0]
+                              return_tensors='pt')
         #label = example[args.label_col]
-        return {'input_ids': input_ids}
+        return {"input_ids":input_ids["input_ids"][0], "attention_mask":input_ids["attention_mask"][0]}
 
     train_dataset = train_dataset.map(tokenize_datset, remove_columns=['idx', 'sentence'])
     eval_dataset = eval_dataset.map(tokenize_datset, remove_columns=['idx', 'sentence'])
@@ -80,8 +110,8 @@ def main():
                       data_collator=DataCollatorWithPadding(tokenizer=tokenizer))
 
     if train_args.do_train:
-        trainer.train()
-        trainer.save_model(output_dir=MODEL_STORE_PATH)
+            trainer.train()
+            trainer.save_model(output_dir=MODEL_STORE_PATH)
     #if train_args.do_eval:
         #trainer.evaluate()
 
